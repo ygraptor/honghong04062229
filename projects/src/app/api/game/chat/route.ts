@@ -12,6 +12,12 @@ interface ChatRequest {
   gender?: Gender;
 }
 
+/**
+ * 游戏聊天 API：接收前端 POST 的 JSON，调用 Coze SDK 的大模型，再把「展示用语 + 怒气变化 + 是否粗口」打包成 JSON 返回。
+ *
+ * 「强制」模型同时返回聊天和数字的方式：没有编译器约束模型，靠的是 **system 提示词里写死输出格式**（三行），
+ * 服务端再 **用正则从整段文本里抠出** 【愤怒值变化】和【是否粗口】。模型若没按格式写，解析会失败或得到默认值。
+ */
 export async function POST(request: NextRequest) {
   try {
     const body: ChatRequest = await request.json();
@@ -24,7 +30,11 @@ export async function POST(request: NextRequest) {
     // 根据性别构建角色设定
     const genderRole = gender === 'boyfriend' ? '男朋友' : '女朋友';
 
-    // 构建系统提示
+    /**
+     * systemPrompt：给模型的「总剧本」——人设、当前怒气、规则，以及 **必须遵守的输出格式**。
+     * 模型被要求分三行输出：①台词 ②【愤怒值变化】±数字 ③【是否粗口】是/否。
+     * 这样同一次回复里既有玩家看到的对话，又有程序可解析的结构化信息（靠格式约定，不是 JSON schema 强校验）。
+     */
     const systemPrompt = `你是一个正在生气的${genderRole}。
 
 【你的说话风格】
@@ -58,7 +68,7 @@ export async function POST(request: NextRequest) {
 2. 愤怒值变化范围：-20到+20
 3. 只有用户真正无理或使用粗口时才判定为"是"`;
 
-    // 构建对话历史
+    // system + 历史多轮 + 本轮用户输入，顺序和 ChatGPT 类接口一致
     const conversationMessages = [
       { role: 'system' as const, content: systemPrompt },
       ...messages.map(m => ({
@@ -68,7 +78,10 @@ export async function POST(request: NextRequest) {
       { role: 'user' as const, content: message },
     ];
 
-    // 调用LLM
+    /**
+     * Coze SDK 的 stream：底层仍是一段段 chunk，但本路由在服务端 **for await 全部拼成 fullResponse 字符串**，
+     * 再统一解析；返回给浏览器的是普通 JSON，不是 SSE 流。
+     */
     const stream = client.stream(conversationMessages, {
       temperature: 0.85,
     });
@@ -80,7 +93,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 解析回复 - 清理所有可能的格式标记
+    /**
+     * 下面分两条线处理同一段 fullResponse：
+     * ① messageContent：把玩家要看的「台词」留下来，去掉第二、三行里的标记和多余【】，避免气泡里露出【愤怒值变化】等。
+     * ② angerChange / isRude：仍用原始 fullResponse 做正则匹配（必须在清洗前或从原文匹配），否则数字可能被删掉。
+     */
     let messageContent = fullResponse;
     
     // 移除【愤怒值变化】相关标记（支持多种格式）
@@ -102,27 +119,27 @@ export async function POST(request: NextRequest) {
       return trimmed && !/^[+-]?\d+$/.test(trimmed) && !/^(是|否)$/.test(trimmed);
     }).join('\n').trim();
     
-    // 解析愤怒值变化
+    // 从原文匹配「【愤怒值变化】-5」这种格式；匹配不到则 angerChange 保持 0（前端会当成怒气不变）
     let angerChange = 0;
     const angerMatch = fullResponse.match(/【愤怒值变化】([+-]?\d+)/);
     if (angerMatch) {
       angerChange = parseInt(angerMatch[1]);
     }
 
-    // 解析是否粗口
     let isRude = false;
     const rudeMatch = fullResponse.match(/【是否粗口】(是|否)/);
     if (rudeMatch) {
       isRude = rudeMatch[1] === '是';
     }
 
-    // 额外检查用户输入是否包含粗口
+    // 服务端再扫一遍用户原文，防止模型漏标「粗口」
     const rudeWords = ['傻逼', '操你', '妈的', '草泥马', '滚', '滚蛋', '闭嘴', '烦人', '神经病', '脑残'];
     const userMessage = message.toLowerCase();
     if (rudeWords.some(word => userMessage.includes(word))) {
       isRude = true;
     }
 
+    // 前端 useGameLogic 只认这三个字段；怒气加减在 useGameState.addAIMessage 里做
     return NextResponse.json({
       message: messageContent,
       angerChange,

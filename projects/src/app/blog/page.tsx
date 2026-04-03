@@ -5,6 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, Clock, Calendar, BookOpen } from 'lucide-react';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import BlogSecretGenerateButton from '@/components/BlogSecretGenerateButton';
+import BlogPostsSearch from '@/components/BlogPostsSearch';
 
 export const metadata: Metadata = {
   title: '恋爱攻略 - AI伴侣哄哄乐',
@@ -77,7 +79,7 @@ export default async function BlogPage() {
             <p className="text-gray-600">专业的恋爱沟通技巧，助你成为哄人高手</p>
           </div>
 
-          {/* 文章列表 */}
+          {/* 文章列表（支持搜索过滤） */}
           {posts.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
@@ -86,53 +88,16 @@ export default async function BlogPage() {
               <p className="text-gray-400">暂无文章</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {posts.map((post) => (
-                <Link key={post.id} href={`/blog/${post.id}`}>
-                  <Card className="bg-white/85 backdrop-blur-sm hover:bg-white/95 transition-all hover:shadow-lg cursor-pointer border-0 shadow-md">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-4">
-                        <CardTitle className="text-lg text-gray-800 hover:text-pink-500 transition-colors">
-                          {post.title}
-                        </CardTitle>
-                        <div className="flex items-center gap-1 text-gray-400 text-sm flex-shrink-0">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>{post.read_time || '3分钟'}</span>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-gray-600 text-sm leading-relaxed mb-3 line-clamp-2">
-                        {post.summary}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {post.tags?.split(',').map((tag) => (
-                            <Badge 
-                              key={tag} 
-                              variant="secondary" 
-                              className="bg-pink-50 text-pink-600 hover:bg-pink-100"
-                            >
-                              {tag.trim()}
-                            </Badge>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-1 text-gray-400 text-xs">
-                          <Calendar className="w-3 h-3" />
-                          <span>{new Date(post.created_at).toLocaleDateString('zh-CN')}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
+            <BlogPostsSearch posts={posts} />
           )}
 
           {/* 底部提示 */}
           <div className="mt-8 text-center text-gray-400 text-sm">
             更多攻略持续更新中...
           </div>
+
+          {/* 秘密功能：默认隐藏，通过快捷键 Alt+G 临时显示，用于调用 /api/blog/generate */}
+          <BlogSecretGenerateButton />
         </div>
       </div>
     </div>

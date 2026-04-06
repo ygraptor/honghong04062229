@@ -1,16 +1,14 @@
 {
-  "name": "honghong-simulator",
-  "version": "1.0.0",
+  "name": "coze-web-app",
+  "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "next dev --port 5000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
-  },
-  "dependencies": {
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest"
   }
 }
